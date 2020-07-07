@@ -1,0 +1,2 @@
+include ':app1'
+include ':player-lib', ':app'
