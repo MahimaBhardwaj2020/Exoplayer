@@ -17,23 +17,32 @@ package com.example.exoplayer;
 
 import android.annotation.SuppressLint;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.TextView;
 
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.ExoPlayerFactory;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.dash.DashMediaSource;
+import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.ui.PlayerView;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.util.EventLogger;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.Util;
+
+
 
 
 /**
@@ -47,8 +56,12 @@ public class PlayerActivity extends AppCompatActivity {
   private int currentWindow = 0;
   private long playbackPosition = 0;
   private PlaybackStateListener playbackStateListener;
+  private DefaultTrackSelector trackSelector;
+  private DefaultTrackSelector.Parameters trackSelectorParameters;
   private static final String TAG = PlayerActivity.class.getName();
-
+  private TextView titleTextView;
+  private TextView analyticTextView;
+  private AnalyticsTextViewHelper analyticsViewHelper;
 
 
   private void releasePlayer() {
@@ -56,8 +69,7 @@ public class PlayerActivity extends AppCompatActivity {
       playWhenReady = player.getPlayWhenReady();
       playbackPosition = player.getCurrentPosition();
       currentWindow = player.getCurrentWindowIndex();
-      player.release();
-      player = null;
+      analyticsViewHelper.stop();
       player.removeListener(playbackStateListener);
       player.release();
       player = null;
@@ -66,14 +78,18 @@ public class PlayerActivity extends AppCompatActivity {
 
 
 
+  @SuppressLint("NewApi")
+  @RequiresApi(api = Build.VERSION_CODES.O)
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_player);
     playbackStateListener = new PlaybackStateListener();
     playerView = findViewById(R.id.video_view);
-
+    titleTextView = findViewById(R.id.title_text_view);
+    analyticTextView = findViewById(R.id.debug_text_view);
   }
+
   @SuppressLint("InlinedApi")
   private void hideSystemUi() {
     playerView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LOW_PROFILE
@@ -117,45 +133,39 @@ public class PlayerActivity extends AppCompatActivity {
     }
   }
 
+  @SuppressLint("NewApi")
   private void initializePlayer() {
     if (player == null) {
-      DefaultTrackSelector trackSelector = new DefaultTrackSelector();
-      trackSelector.setParameters(trackSelector.buildUponParameters().setMaxVideoSizeSd());
+      TrackSelection.Factory trackSelectionFactory = new AdaptiveTrackSelection.Factory();
+      trackSelector = new DefaultTrackSelector(trackSelectionFactory );
+      trackSelectorParameters = trackSelector.getParameters();
+      trackSelector.setParameters(trackSelectorParameters);
       player = ExoPlayerFactory.newSimpleInstance(this, trackSelector);
+      playerView.setPlayer(player);
 
+      Uri uri = Uri.parse(getString(R.string.media_url_dash));
+      Uri uri1 = Uri.parse(getString(R.string.media_url_dash));
+      MediaSource mediaSource = buildMediaSource(uri,uri1);
+      player.setPlayWhenReady(playWhenReady);
+      player.seekTo(currentWindow, playbackPosition);
+      player.addListener(playbackStateListener);
+      player.addAnalyticsListener(new EventLogger(trackSelector));
+      player.addAnalyticsListener(new AnalyticsEvents(player, titleTextView));
+      analyticsViewHelper = new AnalyticsTextViewHelper(player, analyticTextView);
+      analyticsViewHelper.start();
+      player.prepare(mediaSource, false, false);
+
+      titleTextView.setText("" );
     }
-    //player = ExoPlayerFactory.newSimpleInstance(this);
-    playerView.setPlayer(player);
-    //Uri uri = Uri.parse(getString(R.string.media_url_mp3));
-    //Uri uri = Uri.parse(getString(R.string.media_url_mp4));
-    Uri uri = Uri.parse(getString(R.string.media_url_dash));
-    MediaSource mediaSource = buildMediaSource(uri);
-    player.setPlayWhenReady(playWhenReady);
-    player.seekTo(currentWindow, playbackPosition);
-    player.prepare(mediaSource, false, false);
-    player.addListener(playbackStateListener);
-    player.prepare(mediaSource, false, false);
-
   }
-  //private MediaSource buildMediaSource(Uri uri) {
-  //DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(this, "exoplayer-codelab");
-  //return new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(uri);
-  //}
-  //private MediaSource buildMediaSource(Uri uri) {
-  // These factories are used to construct two media sources below
-  //DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(this, "exoplayer-codelab");
-  //ProgressiveMediaSource.Factory mediaSourceFactory = new ProgressiveMediaSource.Factory(dataSourceFactory);
-  // Create a media source using the supplied URI
-  //MediaSource mediaSource1 = mediaSourceFactory.createMediaSource(uri);
-  // Additionally create a media source using an MP3
-  //Uri audioUri = Uri.parse(getString(R.string.media_url_mp3));
-  //MediaSource mediaSource2 = mediaSourceFactory.createMediaSource(audioUri);
-  //return new ConcatenatingMediaSource(mediaSource1, mediaSource2);
-  //}
-  private MediaSource buildMediaSource(Uri uri) {
+
+
+  private MediaSource buildMediaSource(Uri uri, Uri uri1) {
     DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(this, "exoplayer-codelab");
     DashMediaSource.Factory mediaSourceFactory = new DashMediaSource.Factory(dataSourceFactory);
-    return mediaSourceFactory.createMediaSource(uri);
+    MediaSource mediaSource1 = mediaSourceFactory.createMediaSource(uri);
+    MediaSource mediaSource2 = mediaSourceFactory.createMediaSource(uri1);
+    return new ConcatenatingMediaSource(mediaSource1, mediaSource2);
   }
 
 
@@ -183,6 +193,5 @@ public class PlayerActivity extends AppCompatActivity {
       }
       Log.d(TAG, "changed state to " + stateString + " playWhenReady: " + playWhenReady);
     }
-
   }
 }
