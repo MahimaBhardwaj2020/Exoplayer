@@ -42,7 +42,10 @@ import com.google.android.exoplayer2.util.EventLogger;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.Util;
 
+import java.time.Duration;
+import java.time.Instant;
 
+import static java.time.Duration.between;
 
 
 /**
@@ -62,6 +65,8 @@ public class PlayerActivity extends AppCompatActivity {
   private TextView titleTextView;
   private TextView analyticTextView;
   private AnalyticsTextViewHelper analyticsViewHelper;
+  private Instant time1;
+  private Instant time2;
 
 
   private void releasePlayer() {
@@ -88,6 +93,7 @@ public class PlayerActivity extends AppCompatActivity {
     playerView = findViewById(R.id.video_view);
     titleTextView = findViewById(R.id.title_text_view);
     analyticTextView = findViewById(R.id.debug_text_view);
+    time1=Instant.now();
   }
 
   @SuppressLint("InlinedApi")
@@ -154,10 +160,17 @@ public class PlayerActivity extends AppCompatActivity {
       analyticsViewHelper = new AnalyticsTextViewHelper(player, analyticTextView);
       analyticsViewHelper.start();
       player.prepare(mediaSource, false, false);
-
-      titleTextView.setText("" );
+      time2=Instant.now();
+      titleTextView.setText("startup time: " +startuptime(time2,time1));
     }
   }
+
+  @RequiresApi(api = Build.VERSION_CODES.O)
+  private Duration startuptime(Instant time2, Instant time1) {
+    Duration startuptime= between(time1,time2);
+    return startuptime;
+  }
+
 
 
   private MediaSource buildMediaSource(Uri uri, Uri uri1) {
